@@ -33,8 +33,9 @@ public class PartnerWebController {
         String url = baseUrl + partnerEndpoint + "/login";
 
         HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-
+     // Sets the request ContentType to application/x-www-form-urlencoded to send the login details as form fields
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED); 
+     // Creates the form payload map
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("email", email);
         form.add("password", password);
@@ -44,11 +45,12 @@ public class PartnerWebController {
                     restTemplate.postForEntity(url, new HttpEntity<>(form, headers), Map.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+            	// Extract "token" field from API response body
                 Object tokenObj = response.getBody().get("token");
                 if (tokenObj != null) {
                     String token = tokenObj.toString();
-                    session.setAttribute("token", token); // optional (fallback)
-                    return ResponseEntity.ok(Map.of("token", token));
+                    session.setAttribute("token", token); // Store token inside session so future requests can reuse it
+                    return ResponseEntity.ok(Map.of("token", token)); // Return token as JSON response to frontend
                 }
             }
 
