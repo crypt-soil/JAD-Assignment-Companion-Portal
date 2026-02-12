@@ -3,7 +3,6 @@ package com.silvercare.companion_portal.controller;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
-import org.springframework.stereotype.Controller;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.*;
@@ -12,7 +11,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.Map;
 
-@Controller
+@RestController
 @RequestMapping("/partner")
 public class PartnerWebController {
 
@@ -24,17 +23,12 @@ public class PartnerWebController {
 
     private final RestTemplate restTemplate = new RestTemplate();
 
-    // ===================== PAGES (static HTML, no thymeleaf) =====================
-
-    @GetMapping("/login")
-    public String loginPage() {
-        return "partner/login"; // partner/login.html (no th:* inside)
-    }
+    // ===================== AUTH (ENDPOINTS ONLY) =====================
 
     @PostMapping("/login")
-    public String login(@RequestParam String email,
-                        @RequestParam String password,
-                        HttpSession session) {
+    public ResponseEntity<?> login(@RequestParam String email,
+                                   @RequestParam String password,
+                                   HttpSession session) {
 
         String url = baseUrl + partnerEndpoint + "/login";
 
@@ -45,63 +39,59 @@ public class PartnerWebController {
         form.add("email", email);
         form.add("password", password);
 
-        HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(form, headers);
-
         try {
-            ResponseEntity<Map> response = restTemplate.postForEntity(url, entity, Map.class);
+            ResponseEntity<Map> response =
+                    restTemplate.postForEntity(url, new HttpEntity<>(form, headers), Map.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 Object tokenObj = response.getBody().get("token");
                 if (tokenObj != null) {
-                    session.setAttribute("token", tokenObj.toString());
-                    return "redirect:/partner/bookings";
+                    String token = tokenObj.toString();
+                    session.setAttribute("token", token); // optional (fallback)
+                    return ResponseEntity.ok(Map.of("token", token));
                 }
             }
 
-            // invalid login
-            return "redirect:/partner/login?error=Invalid+login";
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "invalid_login"));
 
         } catch (HttpStatusCodeException e) {
-            // backend returned 4xx/5xx
             System.out.println("[SPRING] login API status: " + e.getStatusCode());
             System.out.println("[SPRING] login API body: " + e.getResponseBodyAsString());
-            return "redirect:/partner/login?error=Login+failed";
-
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(Map.of("error", "login_failed"));
         } catch (Exception e) {
             e.printStackTrace();
-            return "redirect:/partner/login?error=Login+failed";
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "portal_error"));
         }
     }
 
-    @GetMapping("/bookings")
-    public String bookingsPage(HttpSession session) {
-        // page access guard
-        if (session.getAttribute("token") == null) return "redirect:/partner/login";
-        return "partner/bookings"; // partner/bookings.html (JS will fetch data)
-    }
-
-    @GetMapping("/bookings/{id}")
-    public String bookingViewPage(@PathVariable("id") int bookingId, HttpSession session) {
-        if (session.getAttribute("token") == null) return "redirect:/partner/login";
-        // If you are doing JS detail page, return static template:
-        return "partner/booking_view"; // optional page
-        // If you still use thymeleaf here, it will break your "remove thymeleaf" goal.
-    }
-
-    @GetMapping("/logout")
-    public String logout(HttpSession session) {
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(HttpSession session) {
         session.invalidate();
-        return "redirect:/partner/login";
+        return ResponseEntity.ok(Map.of("ok", true));
     }
 
-    // ===================== DATA (proxy endpoints for JS, avoids CORS) =====================
+    // ===================== DATA (ENDPOINTS ONLY) =====================
+
+    private String resolveToken(HttpSession session, String authorization) {
+        if (authorization != null && authorization.startsWith("Bearer ")) {
+            return authorization.substring(7);
+        }
+        return (String) session.getAttribute("token");
+    }
 
     @GetMapping("/bookings/data")
-    @ResponseBody
-    public ResponseEntity<?> bookingsData(HttpSession session) {
-        String token = (String) session.getAttribute("token");
-        if (token == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(Map.of("error", "unauthorized"));
+    public ResponseEntity<?> bookingsData(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            HttpSession session
+    ) {
+        String token = resolveToken(session, authorization);
+        if (token == null || token.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "unauthorized"));
+        }
 
         String url = baseUrl + partnerEndpoint + "/bookings";
 
@@ -115,15 +105,9 @@ public class PartnerWebController {
             return ResponseEntity.ok(response.getBody());
 
         } catch (HttpStatusCodeException e) {
-            System.out.println("[SPRING] bookings API status: " + e.getStatusCode());
-            System.out.println("[SPRING] bookings API body: " + e.getResponseBodyAsString());
-
-            // if token invalid, clear it
             if (e.getStatusCode() == HttpStatus.UNAUTHORIZED) session.removeAttribute("token");
-
             return ResponseEntity.status(e.getStatusCode())
                     .body(Map.of("error", "api_error", "status", e.getStatusCode().value()));
-
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -132,11 +116,16 @@ public class PartnerWebController {
     }
 
     @GetMapping("/bookings/{id}/data")
-    @ResponseBody
-    public ResponseEntity<?> bookingDetailData(@PathVariable("id") int bookingId, HttpSession session) {
-        String token = (String) session.getAttribute("token");
-        if (token == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(Map.of("error", "unauthorized"));
+    public ResponseEntity<?> bookingDetailData(
+            @PathVariable("id") int bookingId,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            HttpSession session
+    ) {
+        String token = resolveToken(session, authorization);
+        if (token == null || token.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "unauthorized"));
+        }
 
         String url = baseUrl + partnerEndpoint + "/bookings/" + bookingId;
 
