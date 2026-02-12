@@ -10,7 +10,10 @@ import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.Map;
-
+/*
+ * Lois Poh 
+ * 2429478
+ */
 @RestController
 @RequestMapping("/partner")
 public class PartnerWebController {
@@ -28,7 +31,7 @@ public class PartnerWebController {
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestParam String email,
                                    @RequestParam String password,
-                                   HttpSession session) {
+                                   HttpSession session) { // Current user's session (using the stored token)
 
         String url = baseUrl + partnerEndpoint + "/login";
 
@@ -41,12 +44,12 @@ public class PartnerWebController {
         form.add("password", password);
 
         try {
+        	// Send POST request to the API login endpoint with (form + headers)
             ResponseEntity<Map> response =
-                    restTemplate.postForEntity(url, new HttpEntity<>(form, headers), Map.class);
+                    restTemplate.postForEntity(url, new HttpEntity<>(form, headers), Map.class); 
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-            	// Extract "token" field from API response body
-                Object tokenObj = response.getBody().get("token");
+                Object tokenObj = response.getBody().get("token"); // Extract "token" field from API response body
                 if (tokenObj != null) {
                     String token = tokenObj.toString();
                     session.setAttribute("token", token); // Store token inside session so future requests can reuse it
@@ -76,7 +79,10 @@ public class PartnerWebController {
     }
 
     // ===================== DATA (ENDPOINTS ONLY) =====================
-
+    
+    // Helper method to get token from either:
+    // 1) Authorization header "Bearer <token>"
+    // 2) Session attribute "token"
     private String resolveToken(HttpSession session, String authorization) {
         if (authorization != null && authorization.startsWith("Bearer ")) {
             return authorization.substring(7);
