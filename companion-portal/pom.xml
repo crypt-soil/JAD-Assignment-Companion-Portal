@@ -11,6 +11,7 @@
 	<groupId>com.silvercare</groupId>
 	<artifactId>companion-portal</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
+	<packaging>war</packaging>
 	<name>companion-portal</name>
 	<description>The Companion Partner Portal is a third-party B2B web platform designed for approved service partners who provide companionship and appointment assistance services under the SilverCare system.  This portal enables external companion providers to securely access and manage service bookings assigned to them.</description>
 	<url/>
@@ -31,9 +32,24 @@
 	</properties>
 	
 	<dependencies>
+
+  <!-- Web, but exclude embedded Tomcat -->
   <dependency>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-web</artifactId>
+    <exclusions>
+      <exclusion>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-tomcat</artifactId>
+      </exclusion>
+    </exclusions>
+  </dependency>
+
+  <!-- Tomcat provided by Azure Tomcat -->
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-tomcat</artifactId>
+    <scope>provided</scope>
   </dependency>
 
   <dependency>
@@ -51,6 +67,7 @@
     <artifactId>spring-boot-starter-test</artifactId>
     <scope>test</scope>
   </dependency>
+
 </dependencies>
 
 	<build>
